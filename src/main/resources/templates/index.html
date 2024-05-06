@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Group5 Admin Application S2 Cinemas</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa; /* Light gray background color */
+        }
+        .card {
+            margin-bottom: 20px;
+            border: 1px solid rgba(0, 0, 0, 0.125);
+            border-radius: 0.25rem;
+        }
+        .card-title {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+        .card-body {
+            padding: 1.25rem;
+        }
+        .list-group-item {
+            padding: 0.75rem 1.25rem;
+            border: none;
+        }
+        .modal-body {
+            padding: 2rem;
+        }
+        .error-message {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://kit.fontawesome.com/a076d05399.js"></script>
+    
+    <script>
+        window.onload = function() {
+            $('#loginModal').modal('show');
+        };
+
+		function loginUser() {
+		    var username = document.getElementById('username').value;
+		    var password = document.getElementById('password').value;
+		
+		    fetch('http://localhost:8080/api/v1/users/login', {
+		        method: 'POST',
+		        headers: {
+		            'Content-Type': 'application/json'
+		        },
+		        body: JSON.stringify({
+		            username: username,
+		            password: password
+		        })
+		    })
+		    .then(response => {
+		        if (!response.ok) {
+		            throw new Error('Invalid username or password');
+		        }
+		        return response.json();
+		    })
+		    .then(data => {
+		        localStorage.setItem('token', data.token);
+		        localStorage.setItem('username', username); // Store the username in local storage
+		        $('#loginModal').modal('hide');
+		        $('#dateModal').modal('show'); // Show date modal after successful login
+		        fetchMoviesByDate();
+		    })
+		    .catch(error => {
+		        console.error('Error logging in:', error);
+		        var errorMessageElement = document.getElementById('loginError');
+		        errorMessageElement.innerText = error.message;
+		        errorMessageElement.style.display = 'block'; // Ensure div is visible
+		        errorMessageElement.style.color = 'red'; // Set color to red
+		    });
+		}
+
+	    function saveSelectedDate() {
+	        var selectedDate = document.getElementById('selectedDate').value;
+	        localStorage.setItem('selectedDate', selectedDate);
+	        $('#dateModal').modal('hide');
+	        fetchMoviesByDate(); // Fetch movies after date is selected and stored
+	        displayLoggedInUserName();
+   	 }
+   	 
+   	 
+
+	function fetchMoviesByDate() {
+	    var token = localStorage.getItem('token');
+	    var selectedDate = localStorage.getItem('selectedDate');
+	    var userName = localStorage.getItem('username');
+	    
+	    fetch('http://localhost:8081/api/v1/movie-info/findMoviesByDate', {
+	        method: 'POST',
+	        headers: {
+	            'Content-Type': 'application/json',
+	            'Authorization': 'Bearer ' + token // Include the token in the Authorization header
+	        },
+	        body: JSON.stringify({
+	            date: selectedDate,
+	            userName: userName,
+	            token: token
+	        })
+	    })
+	    .then(response => {
+	        if (!response.ok) {
+	            throw new Error('Failed to fetch movies');
+	        }
+	        return response.json();
+	    })
+	    .then(data => {
+	        renderMovies(data); // Call renderMovies() with the data received
+			localStorage.removeItem('selectedDate'); // Clear the selected date from local storage
+	   		localStorage.removeItem('userName'); // Clear the selected date from local storage
+	    })
+	    .catch(error => {
+	        console.error('Error fetching movies:', error);
+	    });
+	}
+
+    function renderMovies(movies) {
+        var movieContainer = document.getElementById('movie-container');
+        movieContainer.innerHTML = ''; // Clear existing content
+        
+        movies.forEach(function(movie, index) {
+            var totalSeats = calculateTotalSeats(movie.seats);
+            var card = document.createElement('div');
+            card.className = 'col-md-4 mb-4';
+            card.innerHTML = `
+                <div class="card border-primary">
+                    <div class="card-body" id="card-${index}">
+                    
+                        <h5 class="card-title">${movie.title}</h5>
+                        <p>Available Seats: ${totalSeats}</p>
+                        <ul class="list-group list-group-flush">
+                            ${movie.showtimes.split(',').map(function(showtime, showtimeIndex) {
+                                var seats = movie.seats.split(',')[showtimeIndex];
+                                return `
+                                    <li class="list-group-item">
+                                            <input type="hidden" name="movie_id" value="${movie.id}">
+                                            <input type="hidden" name="showtime" value="${showtime}">
+                                            Showtime: ${showtime} 
+                                            <input type="disabled" disabled name="num_tickets" placeholder="${seats}" >
+                                    </li>
+                                `;
+                            }).join('')}
+                        </ul>
+				<button type="button" class="btn btn-danger" onclick="deleteMovie('${movie.title}')">Delete</button>
+                    </div>
+                </div>
+            `;
+            movieContainer.appendChild(card);
+        });
+    }
+    
+    
+    function deleteMovie(movieTitle) {
+    // Make API call to delete movie
+    fetch('http://localhost:8082/api/v1/movie-admin/deleteMovie', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            title: movieTitle
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Failed to delete movie');
+        }
+          showSuccessMessage(movieTitle);
+        
+         $('#addMovieModal').modal('hide');
+    })
+    .catch(error => {
+        console.error('Error deleting movie:', error);
+        // Handle error
+    });
+}
+    
+
+
+		function calculateTotalSeats(seatsString) {
+		  // Handle empty or invalid input gracefully
+		  if (!seatsString || !seatsString.trim()) {
+		    return 0;
+		  }
+		
+		  // Split the string into an array of numbers
+		  const numbers = seatsString.split(",").map(Number);
+		
+		  // Validate that all elements are valid numbers
+		  if (numbers.some(isNaN)) {
+		    throw new Error("Invalid input: String contains non-numeric values.");
+		  }
+		
+		  // Calculate the sum using reduce for efficiency
+		  const total = numbers.reduce((acc, num) => acc + num, 0);
+		
+		  return total;
+		}
+    
+
+// Function to book tickets
+    function deleteTicket( movieId, movieTitle) {
+        event.preventDefault(); // Prevent form submission
+        
+
+    }
+
+function addNewMovie() {
+   var title = document.getElementById('movieTitle').value;
+    var date = document.getElementById('movieDate').value;
+    var showtime1 = document.getElementById('showtime1').value;
+    var showtime2 = document.getElementById('showtime2').value;
+    var showtime3 = document.getElementById('showtime3').value;
+    var showtime4 = document.getElementById('showtime4').value;
+    var seats1 = document.getElementById('seats1').value;
+    var seats2 = document.getElementById('seats2').value;
+    var seats3 = document.getElementById('seats3').value;
+    var seats4 = document.getElementById('seats4').value;
+
+    // Combine showtimes and seats into comma-separated strings
+    var combinedShowtimes = [showtime1, showtime2, showtime3, showtime4].join(',');
+    var combinedSeats = [seats1, seats2, seats3, seats4].join(',');
+
+    // Create request body
+    var requestBody = {
+        title: title,
+        date: date,
+        showtimes: combinedShowtimes,
+        seats: combinedSeats
+    };
+
+    // Make API call to add movie
+    fetch('http://localhost:8082/api/v1/movie-admin/addMovie', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Failed to add movie');
+        }
+        $('#addMovieModal').modal('hide');
+                    showSuccessMessageForAdd(title);
+
+    })
+    .catch(error => {
+        console.error('Error adding movie:', error);
+        // Handle error, show error message, etc.
+    });
+}
+
+
+	// Function to show success message in modal
+			function showSuccessMessageForAdd(movieTitle) {
+			    var successMessageElement = document.getElementById('successMessage');
+			    successMessageElement.innerText = `New Movie Added successfully - Movie Title :  ${movieTitle}.`;
+			    $('#successModal').modal('show');
+			    		    // Hide success modal and show date modal again
+			    $('#successModal').on('hidden.bs.modal', function () {
+			        $('#dateModal').modal('show');
+			    });
+			}
+	
+
+		// Function to show success message in modal
+			function showSuccessMessage(movieTitle) {
+			    var successMessageElement = document.getElementById('successMessage');
+			    successMessageElement.innerText = `Delete successful for ${movieTitle}.`;
+			    $('#successModal').modal('show');
+			    		    // Hide success modal and show date modal again
+			    $('#successModal').on('hidden.bs.modal', function () {
+			        $('#dateModal').modal('show');
+			    });
+			}
+	
+
+    
+    function showSuccessMessage(movieTitle) {
+    var successMessageElement = document.getElementById('successMessage');
+    successMessageElement.innerText = `Delete successful for ${movieTitle}.`;
+    $('#successModal').modal('show');
+    
+    // Hide success modal and show date modal again
+    $('#successModal').on('hidden.bs.modal', function () {
+        $('#dateModal').modal('show');
+    });
+    
+	}
+	// Function to display logged-in user's name
+	function displayLoggedInUserName() {
+	    var loggedInUserName = localStorage.getItem('username');
+	    var loggedInUserNameElement = document.getElementById('loggedInUserName');
+	    loggedInUserNameElement.innerText = loggedInUserName;
+	}
+
+	
+
+</script>
+    
+</head>
+<body>
+    <!-- Login Modal -->
+<!-- Login Modal -->
+<div class="modal" id="loginModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Login</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="loginError" class="alert alert-danger" style="display: none;"></div>
+                <form onsubmit="event.preventDefault(); loginUser();">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" class="form-control" id="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" class="form-control" id="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Date Modal -->
+<div class="modal" id="dateModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Select Date</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="selectedDate">Select Date:</label>
+			<input type="date" class="form-control" id="selectedDate" required>
+                </div>
+                <button type="button" class="btn btn-primary" onclick="saveSelectedDate()">Submit</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Success Modal -->
+<div class="modal" id="successModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Booking Status</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="successMessage"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-dismiss="modal">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="modal" id="bookingDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bookingModalTitle">Movies booked by you</span></h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="bookingList"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Movie Modal -->
+<div class="modal" id="addMovieModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Movie</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="movieTitle">Title</label>
+                    <input type="text" class="form-control" id="movieTitle" required>
+                </div>
+                <div class="form-group">
+                    <label for="movieDate">Date</label>
+                    <input type="date" class="form-control" id="movieDate" required>
+                </div>
+				 <div class="form-group row">
+				        <label for="showtime1" class="col-sm-2 col-form-label">Showtime 1</label>
+				        <div class="col-sm-4">
+				            <div class="input-group">
+				                <input type="text" class="form-control" id="showtime1" required>
+				                <div class="input-group-append">
+				                    <span class="input-group-text"><i class="fas fa-clock"></i></span>
+				                </div>
+				            </div>
+				        </div>
+				        <label for="seats1" class="col-sm-2 col-form-label">Seats 1</label>
+				        <div class="col-sm-4">
+				            <input type="text" class="form-control" id="seats1" required>
+				        </div>
+				    </div>
+				     <div class="form-group row">
+        <label for="showtime1" class="col-sm-2 col-form-label">Showtime 2</label>
+        <div class="col-sm-4">
+            <div class="input-group">
+                <input type="text" class="form-control" id="showtime2" required>
+                <div class="input-group-append">
+                    <span class="input-group-text"><i class="fas fa-clock"></i></span>
+                </div>
+            </div>
+        </div>
+        <label for="seats1" class="col-sm-2 col-form-label">Seats 2</label>
+        <div class="col-sm-4">
+            <input type="text" class="form-control" id="seats2" required>
+        </div>
+    </div>
+     <div class="form-group row">
+        <label for="showtime1" class="col-sm-2 col-form-label">Showtime 3</label>
+        <div class="col-sm-4">
+            <div class="input-group">
+                <input type="text" class="form-control" id="showtime3" required>
+                <div class="input-group-append">
+                    <span class="input-group-text"><i class="fas fa-clock"></i></span>
+                </div>
+            </div>
+        </div>
+        <label for="seats1" class="col-sm-2 col-form-label">Seats 3</label>
+        <div class="col-sm-4">
+            <input type="text" class="form-control" id="seats3" required>
+        </div>
+    </div>
+     <div class="form-group row">
+        <label for="showtime1" class="col-sm-2 col-form-label">Showtime 4</label>
+        <div class="col-sm-4">
+            <div class="input-group">
+                <input type="text" class="form-control" id="showtime4" required>
+                <div class="input-group-append">
+                    <span class="input-group-text"><i class="fas fa-clock"></i></span>
+                </div>
+            </div>
+        </div>
+        <label for="seats1" class="col-sm-2 col-form-label">Seats 4</label>
+        <div class="col-sm-4">
+            <input type="text" class="form-control" id="seats4" required>
+        </div>
+    </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="addNewMovie()">Add Movie</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<nav class="navbar navbar-expand-lg navbar-light bg-light" style="background-color: #f8f9fa;">
+    <span class="navbar-brand">Group5 Admin App</span>
+    <ul class="navbar-nav ml-auto">
+        <li class="nav-item">
+            <span class="nav-link">Hi, <span id="loggedInUserName"></span></span>
+        </li>
+			<li class="nav-item">
+			    <a class="nav-link" href="#" id="changeDateLink" onclick="$('#dateModal').modal('show'); ">Change Date</a>
+			</li>
+
+		   <li class="nav-item">
+		    <a class="nav-link" href="#" onclick="$('#addMovieModal').modal('show')">Add New Movie</a>
+		</li>
+
+    </ul>
+</nav>
+
+
+    <div class="container mt-5">
+        <h1 class="text-center mb-5">Group5 Admin Application for S2 Cinemas</h1>
+        <div class="row justify-content-center" id="movie-container">
+            <!-- Movies will be dynamically rendered here -->
+        </div>
+    </div>
+</body>
+</html>
