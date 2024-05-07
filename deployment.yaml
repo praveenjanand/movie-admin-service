@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-service-deployment
+  labels:
+    app: admin-service-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: admin-service-deployment
+  template:
+    metadata:
+      labels:
+        app: admin-service-deployment
+    spec:
+      containers:
+      - name: admin-service-deployment
+        image: giridharaguptha/ticket-booking-admin-service:latest
+        ports:
+        - containerPort: 8082
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-service
+spec:
+  selector:
+    app: admin-service-deployment
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8082
+  type: ClusterIP
