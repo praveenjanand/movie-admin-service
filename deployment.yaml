@@ -5,7 +5,7 @@ metadata:
   labels:
     app: admin-service-deployment
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: admin-service-deployment
@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: admin-service-deployment
-        image: giridharaguptha/ticket-booking-admin-service:latest
+        image: giridharaguptha/ticket-booking-admin-service:1.0.0
         ports:
         - containerPort: 8082
 ---
